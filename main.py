@@ -1,19 +1,23 @@
 # Bu kod hücresi main.py dosyasında bulunmalıdır.
-import numpy as np
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 from statsmodels.tsa.stattools import adfuller
 import streamlit as st
 import plotly.express as px
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC, SVR
+from sklearn.metrics import accuracy_score, mean_squared_error
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 
 
 
 def read_data(data):
   """ Reads the data as a Pandas DataFrame. """
   df = pd.read_csv(data)
-  df['Datetime'] = pd.to_datetime(df['Datetime'])
-  df.set_index('Datetime', inplace=True)
+  try:
+    df['Datetime'] = pd.to_datetime(df['Datetime'])
+    df.set_index('Datetime', inplace=True)
+  except:
+    pass
   return df
 
 
@@ -35,6 +39,20 @@ def initial_tests(data):
       st.write("**⚠ The data is stationary.**")
   else:
       st.write("**⚠ The data is not stationary.**")
+
+
+def encode_features(df, cates, enc):
+  """ Encodes the categorical features based on their encoding type. """
+  df_encoded = df.copy()
+  if enc == 'One-hot Encoding':
+    df_encoded = pd.get_dummies(df_encoded, columns=cates)
+  elif enc == 'Label Encoding':
+    label_encoders = {}
+  for col in cates:
+    le = LabelEncoder()
+    df_encoded[col] = le.fit_transform(df_encoded[col])
+    label_encoders[col] = le
+  return df_encoded
 
 
 def prophet_train(df):
@@ -68,31 +86,69 @@ def sarima_train(df):
 def sarimax_train(df):
   st.write("SARIMAX Training has begun.")
 
-def lr_train(df, problem):
+
+def lr_train(df, problem, dep, indeps, train_size):
    st.write("Linear Regression Training has begun.")
 
 
-def logr_train(df, problem):
+def logr_train(df, problem, dep, indeps, train_size):
    st.write("Logistic Regression Training has begun.")
 
 
-def svm_train(df, problem):
-   st.write("SVM Training has begun.")
+def svm_train(df, problem, dep, indeps, train_size, cates=None, enc=None):
+  """ Trains an SVM model. 
+      :param: df
+      :param: problem
+      :param: dep
+      :param: train_size
+      :param: cates: Names of the categorical columns to encode
+      :param: enc: Encoding type, 'One-hot Encoding' or 'Label Encoding'
+  """
+  st.write("SVM Training has begun.")
+  if cates != None and enc !=None:
+    df = encode_features(df, cates, enc)
+  
+  X = df[indeps]
+  y = df[dep]
+  train_size /= 100
+  X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=1-train_size, random_state=42
+  )
+
+  if problem == "Classification":
+    st.write("SVC is running.")
+    st.write("Dependent variables:", dep)
+    st.write("Independent variable:", indeps)
+    model = SVC()
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    st.write(f"Classification Accuracy: {accuracy}")
+
+  elif problem == "Regression":
+    st.Write("SVM is running.")
+    st.write("Dependent variables:", dep)
+    st.write("Independent variable:", indeps)
+    model = SVR()
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    mse = mean_squared_error(y_test, y_pred)
+    st.write(f"Regression Mean Squared Error: {mse}")
 
 
-def rf_train(df, problem):
+def rf_train(df, problem, dep, indeps, train_size):
    st.write("Random Forest Training has begun.")
 
 
-def dt_train(df, problem):
+def dt_train(df, problem, dep, indeps, train_size):
    st.write("Decision Tree Training has begun.")
 
 
-def nb_train(df, problem):
+def nb_train(df, problem, dep, indeps, train_size):
    st.write("Naive Bayes Training has begun.")
 
 
-def nn_train(df, problem):
+def nn_train(df, problem, dep, indeps, train_size):
    st.write("Neural Network Training has begun.")
 
 
@@ -125,12 +181,15 @@ def peek_data(df):
     st.write(df[showData].head(50))
 
 
+
 def st_time_series_scenario(df):
     """ Builds the page if the data is in time-series format. """
     st.subheader("")
     st.subheader("ADF Test Results")
     with st.spinner("Tests are being completed..."):
           initial_tests(df)
+          drop_nan = st.checkbox('Drop NaN values')
+          if drop_nan: df = df.dropna()
           # Plots
           col1, col2 = st.columns(2)
           with col1:
@@ -175,19 +234,31 @@ def st_time_series_scenario(df):
 def st_normal_scenario(df):
   """ Builds the page if the data does not have a time-series format. """
   st.write("The data doesn't have a time-series format.")
+  
+  drop_nan = st.checkbox('Drop NaN values')
+  if drop_nan: df = df.dropna()
+  
   st.subheader("Data Content")
   peek_data(df)
 
   # Representation
   st.subheader("Representation")
   st.write("Choose the independent variable columns:")
-  selected_cols = st.selectbox("", df.columns, key="ind")
-  st.write("You selected:", selected_cols)
-  #st.radiobutton()
+  indep_cols = st.multiselect("", df.columns, key="ind")
+  st.write("You selected:", indep_cols)
 
   st.write("Choose the dependent variable column:")
-  selected_col = st.selectbox("", df.columns, key="dep")
-  st.write("You selected:", selected_col)
+  dep_col = st.selectbox("", df.columns, key="dep")
+  st.write("You selected:", dep_col)
+
+  st.write("Choose the categorical columns to encode:")
+  cates = st.multiselect("", df.columns, key="cat")
+  st.write("You selected:", cates)
+  
+  encodings = ["One-hot Encoding, Label Encoding"]
+  st.write("Choose the encoding for categorical columns:")
+  enc = st.selectbox("", encodings, key="enc")
+  st.write("You selected:", enc)
 
   algos = [
      "Linear Regession", "Logistic Regression", "SVM", "Random Forest",
@@ -202,17 +273,31 @@ def st_normal_scenario(df):
      ("Regression", "Classification")
   )
 
+  train_split = st.slider(
+    'Determine the size of the training set in percent:',
+    min_value=0,
+    max_value=100,
+    value=70,
+    step=1
+  )
+
   # Model training
   if st.button("Train the model"):
     st.write("Model training is in progress...")
-    if selected_alg == "Linear Regression": lr_train(df, problem)
-    elif selected_alg == "Logistic Regression": logr_train(df, problem)
-    elif selected_alg == "SVM": svm_train(df, problem)
-    elif selected_alg == "Random Forest": rf_train(df, problem)
-    elif selected_alg == "Decision Tree": dt_train(df, problem)
-    elif selected_alg == "Neural Network": nn_train(df, problem)
-    elif selected_alg == "Naive Bayes": nb_train(df, problem)
-
+    if selected_alg == "Linear Regression":
+      lr_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
+    elif selected_alg == "Logistic Regression":
+      logr_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
+    elif selected_alg == "SVM":
+      svm_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
+    elif selected_alg == "Random Forest":
+      rf_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
+    elif selected_alg == "Decision Tree":
+      dt_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
+    elif selected_alg == "Neural Network":
+      nn_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
+    elif selected_alg == "Naive Bayes":
+      nb_train(df, problem, dep_col, indep_cols, train_split, cates, enc)
 
 
 def streamlit_app():
@@ -225,7 +310,7 @@ def streamlit_app():
     if uploaded_file is not None:
       filename = uploaded_file.name
       df = read_data(uploaded_file)
-      time_series = True
+      time_series = False
 
       if time_series:
         st_time_series_scenario(df)
